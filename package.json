@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "sync": "tsx --env-file=.env.local scripts/sync-disputes.ts"
+    "sync": "tsx --env-file=.env.local scripts/sync-disputes.ts",
+    "dispute": "tsx --env-file=.env.local scripts/dispute-actions.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.117.2",
