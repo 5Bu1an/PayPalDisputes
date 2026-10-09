@@ -1,6 +1,11 @@
-import { verifyWebhookSignature } from "@/lib/paypal";
+import { after } from "next/server";
+import { assessDispute } from "@/lib/assess";
+import { getDispute, verifyWebhookSignature } from "@/lib/paypal";
 import { supabaseAdmin } from "@/lib/supabase";
 import { upsertDispute, type PayPalDispute } from "@/lib/disputes";
+
+// Leaves room for the agent, which runs after the response (see `after` below).
+export const maxDuration = 60;
 
 type PayPalWebhookEvent = {
   id: string;
@@ -76,6 +81,19 @@ export async function POST(request: Request) {
         .from("dispute_events")
         .update({ processed_at: new Date().toISOString() })
         .eq("id", event.id);
+
+      // Answer PayPal now; run the agent once the response has been sent. The event's resource
+      // may not be the full dispute, so fetch it fresh first so the agent sees everything.
+      const disputeId = r.dispute_id;
+      after(async () => {
+        try {
+          await upsertDispute(await getDispute<PayPalDispute>(disputeId));
+          const outcome = await assessDispute(disputeId);
+          console.log(`[paypal-webhook] assess ${disputeId}:`, outcome);
+        } catch (err) {
+          console.error(`[paypal-webhook] failed to assess dispute ${disputeId}`, err);
+        }
+      });
     } catch (err) {
       // The raw event is already stored, so it can be reprocessed later.
       console.error(`[paypal-webhook] failed to sync dispute ${r.dispute_id}`, err);

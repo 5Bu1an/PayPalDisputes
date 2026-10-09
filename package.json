@@ -12,7 +12,8 @@
     "openai:check": "tsx --env-file=.env.local scripts/openai-check.ts",
     "seed:orders": "tsx --env-file=.env.local scripts/seed-orders.ts",
     "eval:seed": "tsx --env-file=.env.local scripts/eval-seed.ts",
-    "eval": "tsx --env-file=.env.local scripts/eval.ts"
+    "eval": "tsx --env-file=.env.local scripts/eval.ts",
+    "assess": "tsx --env-file=.env.local scripts/assess.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.117.2",
