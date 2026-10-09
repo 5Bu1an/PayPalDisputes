@@ -1,3 +1,4 @@
+import type { Assessment } from "@/lib/agent";
 import { supabaseAdmin } from "@/lib/supabase";
 
 export type DisputeRow = {
@@ -102,7 +103,50 @@ export type OrderEvidence = {
   simulated: boolean;
 };
 
-export type DisputeDetail = DisputeRow & { raw: PayPalDisputeDetail; order: OrderEvidence | null };
+/** The agent's latest report on a dispute (`decisions` table). */
+export type Decision = {
+  id: string;
+  status: "pending_review" | "approved" | "rejected" | "submitted" | "failed";
+  model: string | null;
+  promptVersion: string | null;
+  createdAt: string;
+  /** False when PayPal has updated the dispute since this report was written. */
+  current: boolean;
+  assessment: Assessment;
+};
+
+export type DisputeDetail = DisputeRow & {
+  raw: PayPalDisputeDetail;
+  order: OrderEvidence | null;
+  decision: Decision | null;
+};
+
+/** The newest decision for a dispute, or null if the agent hasn't assessed it. */
+async function getLatestDecision(disputeId: string, paypalUpdatedAt: string | null): Promise<Decision | null> {
+  const { data: d, error } = await supabaseAdmin()
+    .from("decisions")
+    .select("id, status, model, prompt_version, created_at, dispute_updated_at, assessment")
+    .eq("dispute_id", disputeId)
+    .not("assessment", "is", null)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) throw error;
+  if (!d) return null;
+
+  return {
+    id: d.id,
+    status: d.status,
+    model: d.model,
+    promptVersion: d.prompt_version,
+    createdAt: d.created_at,
+    current:
+      !paypalUpdatedAt ||
+      !d.dispute_updated_at ||
+      new Date(d.dispute_updated_at).getTime() >= new Date(paypalUpdatedAt).getTime(),
+    assessment: d.assessment as Assessment,
+  };
+}
 
 /** The order matching a seller-side PayPal transaction id, or null if there's no record. */
 export async function getOrder(paypalTransactionId: string | undefined): Promise<OrderEvidence | null> {
@@ -150,7 +194,10 @@ export async function getDisputeDetail(id: string): Promise<DisputeDetail | null
 
   const seller = d.sellers as { name: string } | { name: string }[] | null;
   const raw = d.raw as PayPalDisputeDetail;
-  const order = await getOrder(raw.disputed_transactions?.[0]?.seller_transaction_id);
+  const [order, decision] = await Promise.all([
+    getOrder(raw.disputed_transactions?.[0]?.seller_transaction_id),
+    getLatestDecision(d.id, d.paypal_updated_at),
+  ]);
   return {
     id: d.id,
     sellerName: (Array.isArray(seller) ? seller[0]?.name : seller?.name) ?? null,
@@ -167,5 +214,6 @@ export async function getDisputeDetail(id: string): Promise<DisputeDetail | null
     updatedAt: d.paypal_updated_at,
     raw,
     order,
+    decision,
   };
 }

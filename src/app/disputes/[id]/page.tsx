@@ -1,8 +1,10 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { connection } from "next/server";
+import { computeUrgency } from "@/lib/agent";
 import { getDisputeDetail, type OrderEvidence, type PayPalDisputeDetail } from "@/lib/dashboard";
 import { Deadline, formatAmount, humanize, reasonLabel, StatusBadge } from "../../_components/dispute-ui";
+import { AssessmentReport } from "./assessment";
 
 /** PayPal's action names (the `rel` of each POST link) in seller-facing words. */
 const ACTIONS: Record<string, string> = {
@@ -201,9 +203,12 @@ export default async function DisputeDetailPage({ params }: PageProps<"/disputes
           </Card>
 
           <Card title="AI assessment">
-            <p className="text-sm text-zinc-500 dark:text-zinc-400">
-              Not assessed yet. The agent&apos;s recommendation, reasoning and draft response will appear here.
-            </p>
+            <AssessmentReport
+              decision={dispute.decision}
+              urgency={computeUrgency(raw as Parameters<typeof computeUrgency>[0], new Date().toISOString())}
+              currency={dispute.currency}
+              disputeStatus={dispute.status}
+            />
           </Card>
 
           <Card title="Activity">
