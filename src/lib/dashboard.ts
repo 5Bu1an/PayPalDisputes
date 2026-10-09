@@ -105,7 +105,7 @@ export type OrderEvidence = {
 export type DisputeDetail = DisputeRow & { raw: PayPalDisputeDetail; order: OrderEvidence | null };
 
 /** The order matching a seller-side PayPal transaction id, or null if there's no record. */
-async function getOrder(paypalTransactionId: string | undefined): Promise<OrderEvidence | null> {
+export async function getOrder(paypalTransactionId: string | undefined): Promise<OrderEvidence | null> {
   if (!paypalTransactionId) return null;
   const { data: o, error } = await supabaseAdmin()
     .from("orders")
