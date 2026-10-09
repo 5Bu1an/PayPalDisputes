@@ -82,7 +82,60 @@ export type PayPalDisputeDetail = {
   buyer_response_due_date?: string;
 };
 
-export type DisputeDetail = DisputeRow & { raw: PayPalDisputeDetail };
+export type ShippingStatus = "NOT_SHIPPED" | "LABEL_CREATED" | "IN_TRANSIT" | "DELIVERED" | "RETURNED_TO_SENDER";
+
+/** The seller's own record of the order behind a dispute (`orders` table). */
+export type OrderEvidence = {
+  orderNumber: string | null;
+  itemDescription: string | null;
+  shipToName: string | null;
+  shipToAddress: string | null;
+  shipToMatchesPayPal: boolean | null;
+  carrier: string | null;
+  trackingNumber: string | null;
+  shippingStatus: ShippingStatus | null;
+  shippedAt: string | null;
+  deliveredAt: string | null;
+  signatureConfirmed: boolean | null;
+  trackingEvents: { at: string; location?: string; description: string }[];
+  notes: string | null;
+  simulated: boolean;
+};
+
+export type DisputeDetail = DisputeRow & { raw: PayPalDisputeDetail; order: OrderEvidence | null };
+
+/** The order matching a seller-side PayPal transaction id, or null if there's no record. */
+async function getOrder(paypalTransactionId: string | undefined): Promise<OrderEvidence | null> {
+  if (!paypalTransactionId) return null;
+  const { data: o, error } = await supabaseAdmin()
+    .from("orders")
+    .select("*")
+    .eq("paypal_transaction_id", paypalTransactionId)
+    .maybeSingle();
+  if (error) {
+    // PGRST205: table doesn't exist yet (supabase/orders.sql not run). Show no evidence rather than crash.
+    if (error.code === "PGRST205") return null;
+    throw error;
+  }
+  if (!o) return null;
+
+  return {
+    orderNumber: o.order_number,
+    itemDescription: o.item_description,
+    shipToName: o.ship_to_name,
+    shipToAddress: o.ship_to_address,
+    shipToMatchesPayPal: o.ship_to_matches_paypal,
+    carrier: o.carrier,
+    trackingNumber: o.tracking_number,
+    shippingStatus: o.shipping_status,
+    shippedAt: o.shipped_at,
+    deliveredAt: o.delivered_at,
+    signatureConfirmed: o.signature_confirmed,
+    trackingEvents: o.tracking_events ?? [],
+    notes: o.notes,
+    simulated: o.simulated,
+  };
+}
 
 /** One dispute with PayPal's full object, or null if it isn't in the database. */
 export async function getDisputeDetail(id: string): Promise<DisputeDetail | null> {
@@ -96,6 +149,8 @@ export async function getDisputeDetail(id: string): Promise<DisputeDetail | null
   if (!d) return null;
 
   const seller = d.sellers as { name: string } | { name: string }[] | null;
+  const raw = d.raw as PayPalDisputeDetail;
+  const order = await getOrder(raw.disputed_transactions?.[0]?.seller_transaction_id);
   return {
     id: d.id,
     sellerName: (Array.isArray(seller) ? seller[0]?.name : seller?.name) ?? null,
@@ -110,6 +165,7 @@ export async function getDisputeDetail(id: string): Promise<DisputeDetail | null
       ? Math.ceil((new Date(d.seller_response_due_at).getTime() - Date.now()) / 86_400_000)
       : null,
     updatedAt: d.paypal_updated_at,
-    raw: d.raw as PayPalDisputeDetail,
+    raw,
+    order,
   };
 }

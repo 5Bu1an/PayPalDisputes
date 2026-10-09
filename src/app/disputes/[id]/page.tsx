@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { connection } from "next/server";
-import { getDisputeDetail, type PayPalDisputeDetail } from "@/lib/dashboard";
+import { getDisputeDetail, type OrderEvidence, type PayPalDisputeDetail } from "@/lib/dashboard";
 import { Deadline, formatAmount, humanize, reasonLabel, StatusBadge } from "../../_components/dispute-ui";
 
 /** PayPal's action names (the `rel` of each POST link) in seller-facing words. */
@@ -94,6 +94,61 @@ function Timeline({ events }: { events: TimelineEvent[] }) {
   );
 }
 
+const SHIPPING_STYLES: Record<string, string> = {
+  DELIVERED: "text-emerald-700 dark:text-emerald-400",
+  IN_TRANSIT: "text-sky-700 dark:text-sky-400",
+  LABEL_CREATED: "text-amber-600 dark:text-amber-400",
+  NOT_SHIPPED: "text-amber-600 dark:text-amber-400",
+  RETURNED_TO_SENDER: "text-red-600 dark:text-red-400",
+};
+
+const yesNo = (value: boolean | null, good: string, bad: string) =>
+  value === null ? "—" : value ? <span className="text-emerald-700 dark:text-emerald-400">{good}</span> : <span className="text-red-600 dark:text-red-400">{bad}</span>;
+
+/** The seller's order record: carrier, tracking, delivery and the carrier's scan history. */
+function Shipping({ order }: { order: OrderEvidence | null }) {
+  if (!order) return <p className="text-sm text-zinc-500">No order record for this transaction.</p>;
+  return (
+    <>
+      <dl>
+        <Field label="Order">{order.orderNumber ?? "—"}</Field>
+        <Field label="Carrier">{order.carrier ?? "—"}</Field>
+        <Field label="Tracking">
+          <span className="font-mono text-xs">{order.trackingNumber ?? "—"}</span>
+        </Field>
+        <Field label="Status">
+          <span className={SHIPPING_STYLES[order.shippingStatus ?? ""] ?? ""}>{humanize(order.shippingStatus)}</span>
+        </Field>
+        <Field label="Shipped">{formatDateTime(order.shippedAt ?? undefined)}</Field>
+        <Field label="Delivered">{formatDateTime(order.deliveredAt ?? undefined)}</Field>
+        <Field label="Signature">{yesNo(order.signatureConfirmed, "Confirmed", "None")}</Field>
+        <Field label="Ship to">
+          {order.shipToName && <span className="block">{order.shipToName}</span>}
+          <span className="block text-xs text-zinc-500 dark:text-zinc-400">{order.shipToAddress ?? "—"}</span>
+        </Field>
+        <Field label="Matches PayPal address">{yesNo(order.shipToMatchesPayPal, "Yes", "No")}</Field>
+      </dl>
+
+      {order.trackingEvents.length > 0 && (
+        <ol className="mt-4 space-y-2 border-t border-zinc-200 pt-4 dark:border-zinc-800">
+          {[...order.trackingEvents].reverse().map((e, i) => (
+            <li key={i} className="text-sm">
+              <p>{e.description}</p>
+              <p className="text-xs text-zinc-400">
+                {formatDateTime(e.at)}
+                {e.location && ` · ${e.location}`}
+              </p>
+            </li>
+          ))}
+        </ol>
+      )}
+
+      {order.notes && <p className="mt-4 text-sm text-zinc-600 dark:text-zinc-400">{order.notes}</p>}
+      {order.simulated && <p className="mt-3 text-xs text-zinc-400">Demo data, not from a real carrier.</p>}
+    </>
+  );
+}
+
 export default async function DisputeDetailPage({ params }: PageProps<"/disputes/[id]">) {
   await connection();
   const { id } = await params;
@@ -172,6 +227,10 @@ export default async function DisputeDetailPage({ params }: PageProps<"/disputes
                 )}
               </Field>
             </dl>
+          </Card>
+
+          <Card title="Shipping">
+            <Shipping order={dispute.order} />
           </Card>
 
           <Card title="Offer">
