@@ -10,7 +10,9 @@
     "sync": "tsx --env-file=.env.local scripts/sync-disputes.ts",
     "dispute": "tsx --env-file=.env.local scripts/dispute-actions.ts",
     "openai:check": "tsx --env-file=.env.local scripts/openai-check.ts",
-    "seed:orders": "tsx --env-file=.env.local scripts/seed-orders.ts"
+    "seed:orders": "tsx --env-file=.env.local scripts/seed-orders.ts",
+    "eval:seed": "tsx --env-file=.env.local scripts/eval-seed.ts",
+    "eval": "tsx --env-file=.env.local scripts/eval.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.117.2",
