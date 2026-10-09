@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { connection } from "next/server";
 import { computeUrgency } from "@/lib/agent";
+import { actionsMode } from "@/lib/respond";
 import { getDisputeDetail, type OrderEvidence, type PayPalDisputeDetail } from "@/lib/dashboard";
 import { Deadline, formatAmount, humanize, reasonLabel, StatusBadge } from "../../_components/dispute-ui";
 import { AssessmentReport } from "./assessment";
@@ -206,8 +207,10 @@ export default async function DisputeDetailPage({ params }: PageProps<"/disputes
             <AssessmentReport
               decision={dispute.decision}
               urgency={computeUrgency(raw as Parameters<typeof computeUrgency>[0], new Date().toISOString())}
+              amount={dispute.amount}
               currency={dispute.currency}
               disputeStatus={dispute.status}
+              mode={actionsMode()}
             />
           </Card>
 

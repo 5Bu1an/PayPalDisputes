@@ -113,7 +113,11 @@ export type Decision = {
   /** False when PayPal has updated the dispute since this report was written. */
   current: boolean;
   assessment: Assessment;
+  /** What was sent to PayPal for this report, oldest first. */
+  actions: SentAction[];
 };
+
+export type SentAction = { actionType: string; success: boolean; createdAt: string; error: string | null };
 
 export type DisputeDetail = DisputeRow & {
   raw: PayPalDisputeDetail;
@@ -134,6 +138,13 @@ async function getLatestDecision(disputeId: string, paypalUpdatedAt: string | nu
   if (error) throw error;
   if (!d) return null;
 
+  const { data: sent, error: sentError } = await supabaseAdmin()
+    .from("actions")
+    .select("action_type, success, created_at, response")
+    .eq("decision_id", d.id)
+    .order("created_at");
+  if (sentError) throw sentError;
+
   return {
     id: d.id,
     status: d.status,
@@ -145,6 +156,15 @@ async function getLatestDecision(disputeId: string, paypalUpdatedAt: string | nu
       !d.dispute_updated_at ||
       new Date(d.dispute_updated_at).getTime() >= new Date(paypalUpdatedAt).getTime(),
     assessment: d.assessment as Assessment,
+    actions: sent.map((a) => {
+      const body = (a.response as { body?: { message?: string; details?: { description?: string }[] } } | null)?.body;
+      return {
+        actionType: a.action_type,
+        success: a.success,
+        createdAt: a.created_at,
+        error: a.success ? null : (body?.details?.[0]?.description ?? body?.message ?? "PayPal rejected it"),
+      };
+    }),
   };
 }
 
