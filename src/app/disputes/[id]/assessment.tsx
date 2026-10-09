@@ -1,9 +1,10 @@
 import type { computeUrgency } from "@/lib/agent";
 import type { Decision } from "@/lib/dashboard";
-import { formatAmount } from "../../_components/dispute-ui";
+import type { ActionsMode } from "@/lib/respond";
+import { DRAFT_LABELS, formatAmount } from "../../_components/dispute-ui";
+import { ReviewForm } from "./review";
 
 type Level = "high" | "medium" | "low";
-type Draft = Decision["assessment"]["drafts"][number];
 
 const RECOMMENDATION: Record<string, { label: string; style: string }> = {
   fight: { label: "Fight", style: "bg-sky-100 text-sky-900 dark:bg-sky-950 dark:text-sky-200" },
@@ -15,14 +16,6 @@ const LEVEL_STYLES: Record<Level, string> = {
   high: "border-red-200 text-red-700 dark:border-red-900 dark:text-red-400",
   medium: "border-amber-200 text-amber-700 dark:border-amber-900 dark:text-amber-400",
   low: "border-emerald-200 text-emerald-700 dark:border-emerald-900 dark:text-emerald-400",
-};
-
-/** What each draft does once sent, in seller-facing words. */
-const DRAFT_LABELS: Record<Draft["action"], string> = {
-  provide_evidence: "Submit evidence",
-  send_message: "Message",
-  make_offer: "Offer note",
-  accept_claim: "Accept & refund note",
 };
 
 const STATUS_LABELS: Record<Decision["status"], string> = {
@@ -50,18 +43,41 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   );
 }
 
+/** What was actually sent to PayPal for this report. */
+function SentActions({ actions }: { actions: Decision["actions"] }) {
+  if (actions.length === 0) return null;
+  return (
+    <ul className="my-3 space-y-1 text-sm">
+      {actions.map((s, i) => (
+        <li key={i} className={s.success ? "text-emerald-700 dark:text-emerald-400" : "text-red-600 dark:text-red-400"}>
+          {s.success ? "✓ Sent" : "✗ Failed"}: {DRAFT_LABELS[s.actionType as keyof typeof DRAFT_LABELS] ?? s.actionType}
+          {s.error && ` (${s.error})`}
+          <span className="text-xs text-zinc-400">
+            {" "}
+            · {new Date(s.createdAt).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}
+          </span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 /** The agent's report: recommendation, risk, urgency, reasoning, other options, evidence and drafts. */
 export function AssessmentReport({
   decision,
   urgency,
+  amount,
   currency,
   disputeStatus,
+  mode,
 }: {
   decision: Decision | null;
   /** Worked out when the page loads, so it tracks the deadline instead of the report's age. */
   urgency: ReturnType<typeof computeUrgency>;
+  amount: number | null;
   currency: string | null;
   disputeStatus: string | null;
+  mode: ActionsMode;
 }) {
   if (!decision) {
     return (
@@ -74,6 +90,7 @@ export function AssessmentReport({
   }
 
   const a = decision.assessment;
+  const reviewable = decision.current && (decision.status === "pending_review" || decision.status === "failed");
   const rec = RECOMMENDATION[a.recommendation];
   const assessedAt = new Date(decision.createdAt).toLocaleString("en-US", {
     month: "short",
@@ -144,17 +161,37 @@ export function AssessmentReport({
       </Section>
 
       <Section title={a.drafts.length === 1 ? "Draft" : "Drafts"}>
-        <div className="space-y-3">
-          {a.drafts.map((d, i) => (
-            <div key={i} className="rounded-md border border-zinc-200 dark:border-zinc-800">
-              <p className="border-b border-zinc-200 px-3 py-1.5 text-xs font-medium text-zinc-500 dark:border-zinc-800 dark:text-zinc-400">
-                {DRAFT_LABELS[d.action] ?? d.action} → {d.recipient === "paypal" ? "PayPal" : "buyer"}
+        {reviewable ? (
+          <>
+            {mode === "demo" && (
+              <p className="mb-3 rounded-md bg-sky-50 px-3 py-2 text-xs text-sky-800 dark:bg-sky-950 dark:text-sky-300">
+                Demo mode: try Approve or Reject freely. Nothing is sent to PayPal or saved.
               </p>
-              <p className="whitespace-pre-wrap px-3 py-2 leading-relaxed">{d.text}</p>
+            )}
+            {decision.status === "failed" && <SentActions actions={decision.actions} />}
+            <ReviewForm
+              decisionId={decision.id}
+              drafts={a.drafts}
+              mode={mode}
+              refundAmount={formatAmount(amount, currency)}
+              offerAmount={a.settle_amount !== null ? formatAmount(a.settle_amount, currency) : null}
+            />
+          </>
+        ) : (
+          <>
+            <div className="space-y-3">
+              {a.drafts.map((d, i) => (
+                <div key={i} className="rounded-md border border-zinc-200 dark:border-zinc-800">
+                  <p className="border-b border-zinc-200 px-3 py-1.5 text-xs font-medium text-zinc-500 dark:border-zinc-800 dark:text-zinc-400">
+                    {DRAFT_LABELS[d.action] ?? d.action} → {d.recipient === "paypal" ? "PayPal" : "buyer"}
+                  </p>
+                  <p className="whitespace-pre-wrap px-3 py-2 leading-relaxed">{d.text}</p>
+                </div>
+              ))}
             </div>
-          ))}
-        </div>
-        <p className="mt-2 text-xs text-zinc-400">Nothing is sent until you approve.</p>
+            <SentActions actions={decision.actions} />
+          </>
+        )}
       </Section>
 
       <p className="mt-5 text-xs text-zinc-400">
