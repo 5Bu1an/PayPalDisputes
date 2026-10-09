@@ -1,4 +1,13 @@
+import type { PayPalAction } from "@/lib/agent";
 import type { DisputeRow } from "@/lib/dashboard";
+
+/** What each agent draft does once sent, in seller-facing words. */
+export const DRAFT_LABELS: Record<PayPalAction, string> = {
+  provide_evidence: "Submit evidence",
+  send_message: "Message",
+  make_offer: "Offer note",
+  accept_claim: "Accept & refund note",
+};
 
 const REASONS: Record<string, string> = {
   MERCHANDISE_OR_SERVICE_NOT_RECEIVED: "Item not received",

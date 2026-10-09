@@ -40,7 +40,7 @@ const SIGNATURE_THRESHOLD_USD = 750;
 export function computeUrgency(d: DisputeFields, asOf: string): { urgency: Level; reason: string; daysLeft: number | null } {
   const stage = d.dispute_life_cycle_stage ?? "";
   const daysLeft = d.seller_response_due_date
-    ? Math.floor((new Date(d.seller_response_due_date).getTime() - new Date(asOf).getTime()) / 86_400_000)
+    ? Math.ceil((new Date(d.seller_response_due_date).getTime() - new Date(asOf).getTime()) / 86_400_000)
     : null;
   const when = daysLeft === null ? "no deadline" : daysLeft < 0 ? "deadline passed" : `${daysLeft} day${daysLeft === 1 ? "" : "s"} left`;
 

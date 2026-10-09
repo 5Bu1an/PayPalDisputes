@@ -26,12 +26,50 @@ export async function getAccessToken(): Promise<string> {
   return cachedToken.value;
 }
 
+/** A non-2xx PayPal response, keeping the status so callers can tell e.g. 403 from 422. */
+export class PayPalError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+    readonly body: string,
+  ) {
+    super(message);
+  }
+}
+
 async function paypalGet<T>(pathAndQuery: string): Promise<T> {
   const res = await fetch(`${API_BASE}${pathAndQuery}`, {
     headers: { Authorization: `Bearer ${await getAccessToken()}` },
   });
-  if (!res.ok) throw new Error(`PayPal GET ${pathAndQuery} failed: ${res.status} ${await res.text()}`);
+  if (!res.ok) {
+    const body = await res.text();
+    throw new PayPalError(`PayPal GET ${pathAndQuery} failed: ${res.status} ${body}`, res.status, body);
+  }
   return (await res.json()) as T;
+}
+
+/**
+ * POSTs to a PayPal endpoint and returns the outcome instead of throwing, so callers can record failures.
+ * Pass FormData for multipart endpoints (provide-evidence, send-message), anything else is sent as JSON.
+ */
+export async function paypalPost(path: string, body: unknown): Promise<{ ok: boolean; status: number; body: unknown }> {
+  const multipart = body instanceof FormData;
+  const res = await fetch(`${API_BASE}${path}`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${await getAccessToken()}`,
+      ...(multipart ? {} : { "Content-Type": "application/json" }), // fetch sets the multipart boundary itself
+    },
+    body: multipart ? body : JSON.stringify(body),
+  });
+  const text = await res.text();
+  let parsed: unknown = text;
+  try {
+    parsed = text ? JSON.parse(text) : null;
+  } catch {
+    // not JSON; keep the text
+  }
+  return { ok: res.ok, status: res.status, body: parsed };
 }
 
 /** Lists dispute ids updated in the last `days` days, following pagination. */
