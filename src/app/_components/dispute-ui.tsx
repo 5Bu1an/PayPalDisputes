@@ -1,6 +1,51 @@
 import type { PayPalAction } from "@/lib/agent";
 import type { DisputeRow } from "@/lib/dashboard";
 
+export type Recommendation = "fight" | "refund" | "settle";
+export type Level = "high" | "medium" | "low";
+
+export const RECOMMENDATION: Record<Recommendation, { label: string; style: string }> = {
+  fight: { label: "Fight", style: "bg-sky-100 text-sky-900 dark:bg-sky-950 dark:text-sky-200" },
+  refund: { label: "Refund", style: "bg-zinc-200 text-zinc-900 dark:bg-zinc-800 dark:text-zinc-100" },
+  settle: { label: "Settle", style: "bg-violet-100 text-violet-900 dark:bg-violet-950 dark:text-violet-200" },
+};
+
+const LEVEL_STYLES: Record<Level, string> = {
+  high: "border-red-200 text-red-700 dark:border-red-900 dark:text-red-400",
+  medium: "border-amber-200 text-amber-700 dark:border-amber-900 dark:text-amber-400",
+  low: "border-emerald-200 text-emerald-700 dark:border-emerald-900 dark:text-emerald-400",
+};
+
+/** "Fight", "Refund" or "Settle for $12.00" in the recommendation's colour. */
+export function RecommendationBadge({
+  recommendation,
+  settleAmount,
+  currency,
+  size = "md",
+}: {
+  recommendation: Recommendation;
+  settleAmount?: number | null;
+  currency?: string | null;
+  size?: "sm" | "md";
+}) {
+  const rec = RECOMMENDATION[recommendation];
+  const sizing = size === "sm" ? "px-2 py-0.5 text-xs" : "px-3 py-1 text-base";
+  return (
+    <span className={`inline-block whitespace-nowrap rounded-md font-semibold ${sizing} ${rec.style}`}>
+      {rec.label}
+      {recommendation === "settle" && settleAmount != null && ` for ${formatAmount(settleAmount, currency ?? null)}`}
+    </span>
+  );
+}
+
+export function LevelBadge({ name, level }: { name: string; level: Level }) {
+  return (
+    <span className={`whitespace-nowrap rounded-full border px-2.5 py-0.5 text-xs font-medium ${LEVEL_STYLES[level]}`}>
+      {name}: {level}
+    </span>
+  );
+}
+
 /** What each agent draft does once sent, in seller-facing words. */
 export const DRAFT_LABELS: Record<PayPalAction, string> = {
   provide_evidence: "Submit evidence",

@@ -16,19 +16,41 @@ export type DisputeRow = {
   updatedAt: string | null;
 };
 
-/** Every dispute with its seller's name, soonest seller deadline first. */
-export async function listDisputes(): Promise<DisputeRow[]> {
+/** The latest AI report on a dispute, as much as the list needs. */
+export type ReportSummary = {
+  recommendation: "fight" | "refund" | "settle";
+  settleAmount: number | null;
+  risk: "high" | "medium" | "low" | null;
+  status: Decision["status"];
+  /** False when PayPal has updated the dispute since this report was written. */
+  current: boolean;
+};
+
+export type ListedDispute = DisputeRow & { report: ReportSummary | null };
+
+/** Every dispute with its seller's name and latest AI report, soonest seller deadline first. */
+export async function listDisputes(): Promise<ListedDispute[]> {
   const db = supabaseAdmin();
 
-  const [disputes, sellers] = await Promise.all([
+  const [disputes, sellers, decisions] = await Promise.all([
     db
       .from("disputes")
       .select("id, seller_id, merchant_id, reason, status, lifecycle_stage, amount, currency, seller_response_due_at, paypal_updated_at")
       .order("seller_response_due_at", { ascending: true, nullsFirst: false }),
     db.from("sellers").select("id, name"),
+    db
+      .from("decisions")
+      .select("dispute_id, status, risk, settle_amount, dispute_updated_at, recommendation:assessment->>recommendation")
+      .not("assessment", "is", null)
+      .order("created_at", { ascending: false }),
   ]);
   if (disputes.error) throw disputes.error;
   if (sellers.error) throw sellers.error;
+  if (decisions.error) throw decisions.error;
+
+  // Rows are newest first, so the first one seen per dispute is its current report.
+  const latest = new Map<string, (typeof decisions.data)[number]>();
+  for (const r of decisions.data) if (!latest.has(r.dispute_id)) latest.set(r.dispute_id, r);
 
   const now = Date.now();
   const sellerNames = new Map(sellers.data.map((s) => [s.id, s.name as string]));
@@ -47,7 +69,25 @@ export async function listDisputes(): Promise<DisputeRow[]> {
       ? Math.ceil((new Date(d.seller_response_due_at).getTime() - now) / 86_400_000)
       : null,
     updatedAt: d.paypal_updated_at,
+    report: reportSummary(latest.get(d.id), d.paypal_updated_at),
   }));
+}
+
+function reportSummary(
+  r: { status: string; risk: string | null; settle_amount: number | null; dispute_updated_at: string | null; recommendation: unknown } | undefined,
+  paypalUpdatedAt: string | null,
+): ReportSummary | null {
+  if (!r) return null;
+  return {
+    recommendation: r.recommendation as ReportSummary["recommendation"],
+    settleAmount: r.settle_amount,
+    risk: r.risk as ReportSummary["risk"],
+    status: r.status as Decision["status"],
+    current:
+      !paypalUpdatedAt ||
+      !r.dispute_updated_at ||
+      new Date(r.dispute_updated_at).getTime() >= new Date(paypalUpdatedAt).getTime(),
+  };
 }
 
 type Money = { value: string; currency_code: string };
