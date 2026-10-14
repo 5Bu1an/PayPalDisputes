@@ -15,7 +15,7 @@ const RESOLUTION_CENTER = (process.env.PAYPAL_API_BASE ?? "").includes("sandbox"
 
 const isOpen = (d: HomeDispute) => d.status !== "RESOLVED";
 const needsResponse = (d: HomeDispute) => d.status === "WAITING_FOR_SELLER_RESPONSE";
-const awaitingApproval = (d: HomeDispute) => isOpen(d) && d.decision?.status === "pending_review" && d.decision.current;
+const awaitingApproval = (d: HomeDispute) => isOpen(d) && d.report?.status === "pending_review" && d.report.current;
 
 /** "$1,982.40" → ["$", "1,982.40"], "CA$2,140.00" → ["CA$", "2,140.00"]. */
 function splitCurrency(amount: number, currency: string) {
@@ -304,10 +304,10 @@ function RecentTable({ disputes }: { disputes: HomeDispute[] }) {
                 <StatusBadge status={d.status} />
               </td>
               <td className="px-4 py-3.5">
-                {d.decision?.recommendation ? (
+                {d.report?.recommendation ? (
                   <span className="inline-flex items-center gap-2">
-                    <DecisionBadge decision={d.decision.recommendation} />
-                    {d.decision.status === "pending_review" && d.decision.current && isOpen(d) && <Badge tone="info">Needs approval</Badge>}
+                    <DecisionBadge decision={d.report.recommendation} />
+                    {d.report.status === "pending_review" && d.report.current && isOpen(d) && <Badge tone="info">Needs approval</Badge>}
                   </span>
                 ) : (
                   <span className="text-fg-muted">Not assessed</span>

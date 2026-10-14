@@ -1,22 +1,9 @@
 import type { computeUrgency } from "@/lib/agent";
 import type { Decision } from "@/lib/dashboard";
 import type { ActionsMode } from "@/lib/respond";
-import { DRAFT_LABELS, formatAmount } from "@/app/_components/dispute-ui";
+import { DRAFT_LABELS, formatAmount, LevelBadge, RECOMMENDATION, RecommendationBadge } from "@/app/_components/dispute-ui";
 import { ReviewForm } from "./review";
 
-type Level = "high" | "medium" | "low";
-
-const RECOMMENDATION: Record<string, { label: string; style: string }> = {
-  fight: { label: "Fight", style: "bg-sky-100 text-sky-900 dark:bg-sky-950 dark:text-sky-200" },
-  refund: { label: "Refund", style: "bg-zinc-200 text-zinc-900 dark:bg-zinc-800 dark:text-zinc-100" },
-  settle: { label: "Settle", style: "bg-violet-100 text-violet-900 dark:bg-violet-950 dark:text-violet-200" },
-};
-
-const LEVEL_STYLES: Record<Level, string> = {
-  high: "border-red-200 text-red-700 dark:border-red-900 dark:text-red-400",
-  medium: "border-amber-200 text-amber-700 dark:border-amber-900 dark:text-amber-400",
-  low: "border-emerald-200 text-emerald-700 dark:border-emerald-900 dark:text-emerald-400",
-};
 
 const STATUS_LABELS: Record<Decision["status"], string> = {
   pending_review: "Waiting for your review",
@@ -25,14 +12,6 @@ const STATUS_LABELS: Record<Decision["status"], string> = {
   submitted: "Sent to PayPal",
   failed: "Sending failed",
 };
-
-function LevelBadge({ name, level }: { name: string; level: Level }) {
-  return (
-    <span className={`rounded-full border px-2.5 py-0.5 text-xs font-medium ${LEVEL_STYLES[level]}`}>
-      {name}: {level}
-    </span>
-  );
-}
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
@@ -91,7 +70,6 @@ export function AssessmentReport({
 
   const a = decision.assessment;
   const reviewable = decision.current && (decision.status === "pending_review" || decision.status === "failed");
-  const rec = RECOMMENDATION[a.recommendation];
   const assessedAt = new Date(decision.createdAt).toLocaleString("en-US", {
     month: "short",
     day: "numeric",
@@ -108,10 +86,7 @@ export function AssessmentReport({
       )}
 
       <div className="flex flex-wrap items-center gap-2">
-        <span className={`rounded-md px-3 py-1 text-base font-semibold ${rec.style}`}>
-          {rec.label}
-          {a.recommendation === "settle" && a.settle_amount !== null && ` for ${formatAmount(a.settle_amount, currency)}`}
-        </span>
+        <RecommendationBadge recommendation={a.recommendation} settleAmount={a.settle_amount} currency={currency} />
         <LevelBadge name="Risk" level={a.risk} />
         <LevelBadge name="Urgency" level={urgency.urgency} />
       </div>

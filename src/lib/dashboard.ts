@@ -17,6 +17,35 @@ export type DisputeRow = {
   updatedAt: string | null;
 };
 
+/** The latest AI report on a dispute, as much as the list needs. */
+export type ReportSummary = {
+  recommendation: "fight" | "refund" | "settle";
+  settleAmount: number | null;
+  risk: "high" | "medium" | "low" | null;
+  status: Decision["status"];
+  /** False when PayPal has updated the dispute since this report was written. */
+  current: boolean;
+};
+
+export type ListedDispute = DisputeRow & { report: ReportSummary | null };
+
+function reportSummary(
+  r: { status: string; risk: string | null; settle_amount: number | null; dispute_updated_at: string | null; recommendation: unknown } | undefined,
+  paypalUpdatedAt: string | null,
+): ReportSummary | null {
+  if (!r) return null;
+  return {
+    recommendation: r.recommendation as ReportSummary["recommendation"],
+    settleAmount: r.settle_amount,
+    risk: r.risk as ReportSummary["risk"],
+    status: r.status as Decision["status"],
+    current:
+      !paypalUpdatedAt ||
+      !r.dispute_updated_at ||
+      new Date(r.dispute_updated_at).getTime() >= new Date(paypalUpdatedAt).getTime(),
+  };
+}
+
 type Money = { value: string; currency_code: string };
 
 /** The parts of PayPal's full dispute object (stored in `disputes.raw`) the detail page reads. */
@@ -205,19 +234,12 @@ export async function getDisputeDetail(id: string): Promise<DisputeDetail | null
   };
 }
 
-/** A dispute as the dashboard home shows it: the list row plus buyer, outcome and the agent's latest call. */
-export type HomeDispute = DisputeRow & {
+/** A dispute as the dashboard pages show it: the list row plus buyer, outcome and the latest AI report. */
+export type HomeDispute = ListedDispute & {
   sellerId: string | null;
   buyerName: string | null;
   /** PayPal's outcome code once resolved, e.g. RESOLVED_SELLER_FAVOUR. */
   outcome: string | null;
-  decision: {
-    status: Decision["status"];
-    recommendation: "fight" | "refund" | "settle" | null;
-    confidence: number | null;
-    /** False when PayPal has updated the dispute since the agent's report. */
-    current: boolean;
-  } | null;
 };
 
 /** Everything the dashboard home needs, optionally narrowed to one seller. */
@@ -236,7 +258,7 @@ export async function getHomeData(sellerId?: string): Promise<{ disputes: HomeDi
     db.from("sellers").select("id, name").order("name"),
     db
       .from("decisions")
-      .select("dispute_id, status, created_at, dispute_updated_at, recommendation:assessment->>recommendation, confidence:assessment->>confidence")
+      .select("dispute_id, status, risk, settle_amount, dispute_updated_at, recommendation:assessment->>recommendation")
       .not("assessment", "is", null)
       .order("created_at", { ascending: false }),
   ]);
@@ -254,7 +276,6 @@ export async function getHomeData(sellerId?: string): Promise<{ disputes: HomeDi
   return {
     sellers: sellers.data as { id: string; name: string }[],
     disputes: disputes.data.map((d) => {
-      const dec = latest.get(d.id);
       return {
         id: d.id,
         sellerId: d.seller_id,
@@ -272,17 +293,7 @@ export async function getHomeData(sellerId?: string): Promise<{ disputes: HomeDi
         updatedAt: d.paypal_updated_at,
         buyerName: (d.buyer as string | null) ?? null,
         outcome: (d.outcome as string | null) ?? null,
-        decision: dec
-          ? {
-              status: dec.status,
-              recommendation: (dec.recommendation as "fight" | "refund" | "settle" | null) ?? null,
-              confidence: dec.confidence === null ? null : Number(dec.confidence),
-              current:
-                !d.paypal_updated_at ||
-                !dec.dispute_updated_at ||
-                new Date(dec.dispute_updated_at).getTime() >= new Date(d.paypal_updated_at).getTime(),
-            }
-          : null,
+        report: reportSummary(latest.get(d.id), d.paypal_updated_at),
       };
     }),
   };

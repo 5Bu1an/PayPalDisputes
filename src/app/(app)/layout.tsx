@@ -16,7 +16,7 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
   const { disputes } = await getHomeDataCached();
   const needsResponse = disputes.filter((d) => d.status === "WAITING_FOR_SELLER_RESPONSE").length;
   const awaitingApproval = disputes.filter(
-    (d) => d.status !== "RESOLVED" && d.decision?.status === "pending_review" && d.decision.current,
+    (d) => d.status !== "RESOLVED" && d.report?.status === "pending_review" && d.report.current,
   ).length;
   const mode = actionsMode();
 

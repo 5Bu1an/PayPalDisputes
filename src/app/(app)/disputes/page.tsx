@@ -12,12 +12,48 @@ const VIEWS = {
   all: { label: "All", match: () => true },
   approval: {
     label: "Waiting for approval",
-    match: (d: HomeDispute) => d.status !== "RESOLVED" && d.decision?.status === "pending_review" && d.decision.current,
+    match: (d: HomeDispute) => d.status !== "RESOLVED" && d.report?.status === "pending_review" && d.report.current,
   },
   "needs-response": { label: "Needs response", match: (d: HomeDispute) => d.status === "WAITING_FOR_SELLER_RESPONSE" },
   resolved: { label: "Resolved", match: (d: HomeDispute) => d.status === "RESOLVED" },
 } as const;
 type View = keyof typeof VIEWS;
+
+const REPORT_STATUS: Record<string, string> = {
+  submitted: "Sent to PayPal",
+  approved: "Sending…",
+  rejected: "You rejected it",
+  failed: "Sending failed",
+};
+
+const RISK_TONE = { high: "bad", medium: "warn", low: "ok" } as const;
+
+/** The AI's call on a dispute: recommendation (+ settle amount and risk while it awaits review), or what happened to it. */
+function AiCell({ d }: { d: HomeDispute }) {
+  const r = d.report;
+  if (!r) {
+    return d.status === "WAITING_FOR_SELLER_RESPONSE" ? (
+      <span className="text-[12.5px] text-fg-muted">Assessing…</span>
+    ) : (
+      <span className="text-fg-muted">—</span>
+    );
+  }
+  const note = r.status !== "pending_review" ? REPORT_STATUS[r.status] : !r.current ? "Updating…" : null;
+  const awaiting = r.status === "pending_review" && r.current && d.status !== "RESOLVED";
+  return (
+    <span className="flex flex-col items-start gap-1">
+      <span className="inline-flex flex-wrap items-center gap-1.5">
+        <DecisionBadge decision={r.recommendation} />
+        {r.recommendation === "settle" && r.settleAmount != null && (
+          <span className="text-[12.5px] text-fg-body tabular-nums">for {formatAmount(r.settleAmount, d.currency)}</span>
+        )}
+        {r.risk && awaiting && <Badge tone={RISK_TONE[r.risk]}>Risk: {r.risk}</Badge>}
+        {awaiting && <Badge tone="info">Needs approval</Badge>}
+      </span>
+      {note && <span className={cn("text-[12px]", r.status === "failed" ? "text-bad" : "text-fg-muted")}>{note}</span>}
+    </span>
+  );
+}
 
 /** Soonest seller deadline first; disputes without one go last. */
 const byDeadline = (a: HomeDispute, b: HomeDispute) =>
@@ -104,15 +140,7 @@ export default async function DisputesPage({ searchParams }: PageProps<"/dispute
                     <span className="mt-1 block text-[12px] text-fg-muted">{humanize(d.stage)}</span>
                   </td>
                   <td className="px-4 py-3.5">
-                    {d.decision?.recommendation ? (
-                      <span className="inline-flex flex-wrap items-center gap-1.5">
-                        <DecisionBadge decision={d.decision.recommendation} />
-                        {VIEWS.approval.match(d) && <Badge tone="info">Needs approval</Badge>}
-                        {!d.decision.current && d.status !== "RESOLVED" && <Badge tone="warn">Outdated</Badge>}
-                      </span>
-                    ) : (
-                      <span className="text-fg-muted">Not assessed</span>
-                    )}
+                    <AiCell d={d} />
                   </td>
                   <td className="px-4 py-3.5 whitespace-nowrap">
                     <Deadline dueAt={d.dueAt} daysLeft={d.daysLeft} status={d.status} />
