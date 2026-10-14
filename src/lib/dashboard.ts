@@ -1,4 +1,5 @@
 import type { Assessment } from "@/lib/agent";
+import { cache } from "react";
 import { supabaseAdmin } from "@/lib/supabase";
 
 export type DisputeRow = {
@@ -15,40 +16,6 @@ export type DisputeRow = {
   daysLeft: number | null;
   updatedAt: string | null;
 };
-
-/** Every dispute with its seller's name, soonest seller deadline first. */
-export async function listDisputes(): Promise<DisputeRow[]> {
-  const db = supabaseAdmin();
-
-  const [disputes, sellers] = await Promise.all([
-    db
-      .from("disputes")
-      .select("id, seller_id, merchant_id, reason, status, lifecycle_stage, amount, currency, seller_response_due_at, paypal_updated_at")
-      .order("seller_response_due_at", { ascending: true, nullsFirst: false }),
-    db.from("sellers").select("id, name"),
-  ]);
-  if (disputes.error) throw disputes.error;
-  if (sellers.error) throw sellers.error;
-
-  const now = Date.now();
-  const sellerNames = new Map(sellers.data.map((s) => [s.id, s.name as string]));
-
-  return disputes.data.map((d) => ({
-    id: d.id,
-    sellerName: d.seller_id ? (sellerNames.get(d.seller_id) ?? null) : null,
-    merchantId: d.merchant_id,
-    reason: d.reason,
-    status: d.status,
-    stage: d.lifecycle_stage,
-    amount: d.amount,
-    currency: d.currency,
-    dueAt: d.seller_response_due_at,
-    daysLeft: d.seller_response_due_at
-      ? Math.ceil((new Date(d.seller_response_due_at).getTime() - now) / 86_400_000)
-      : null,
-    updatedAt: d.paypal_updated_at,
-  }));
-}
 
 type Money = { value: string; currency_code: string };
 
@@ -237,3 +204,89 @@ export async function getDisputeDetail(id: string): Promise<DisputeDetail | null
     decision,
   };
 }
+
+/** A dispute as the dashboard home shows it: the list row plus buyer, outcome and the agent's latest call. */
+export type HomeDispute = DisputeRow & {
+  sellerId: string | null;
+  buyerName: string | null;
+  /** PayPal's outcome code once resolved, e.g. RESOLVED_SELLER_FAVOUR. */
+  outcome: string | null;
+  decision: {
+    status: Decision["status"];
+    recommendation: "fight" | "refund" | "settle" | null;
+    confidence: number | null;
+    /** False when PayPal has updated the dispute since the agent's report. */
+    current: boolean;
+  } | null;
+};
+
+/** Everything the dashboard home needs, optionally narrowed to one seller. */
+export async function getHomeData(sellerId?: string): Promise<{ disputes: HomeDispute[]; sellers: { id: string; name: string }[] }> {
+  const db = supabaseAdmin();
+  let disputesQuery = db
+    .from("disputes")
+    .select(
+      "id, seller_id, merchant_id, reason, status, lifecycle_stage, amount, currency, seller_response_due_at, paypal_updated_at, buyer:raw->disputed_transactions->0->buyer->>name, outcome:raw->dispute_outcome->>outcome_code",
+    )
+    .order("paypal_updated_at", { ascending: false, nullsFirst: false });
+  if (sellerId) disputesQuery = disputesQuery.eq("seller_id", sellerId);
+
+  const [disputes, sellers, decisions] = await Promise.all([
+    disputesQuery,
+    db.from("sellers").select("id, name").order("name"),
+    db
+      .from("decisions")
+      .select("dispute_id, status, created_at, dispute_updated_at, recommendation:assessment->>recommendation, confidence:assessment->>confidence")
+      .not("assessment", "is", null)
+      .order("created_at", { ascending: false }),
+  ]);
+  if (disputes.error) throw disputes.error;
+  if (sellers.error) throw sellers.error;
+  if (decisions.error) throw decisions.error;
+
+  // Newest decision per dispute (rows are already newest first).
+  const latest = new Map<string, (typeof decisions.data)[number]>();
+  for (const d of decisions.data) if (!latest.has(d.dispute_id)) latest.set(d.dispute_id, d);
+
+  const now = Date.now();
+  const sellerNames = new Map(sellers.data.map((s) => [s.id, s.name as string]));
+
+  return {
+    sellers: sellers.data as { id: string; name: string }[],
+    disputes: disputes.data.map((d) => {
+      const dec = latest.get(d.id);
+      return {
+        id: d.id,
+        sellerId: d.seller_id,
+        sellerName: d.seller_id ? (sellerNames.get(d.seller_id) ?? null) : null,
+        merchantId: d.merchant_id,
+        reason: d.reason,
+        status: d.status,
+        stage: d.lifecycle_stage,
+        amount: d.amount,
+        currency: d.currency,
+        dueAt: d.seller_response_due_at,
+        daysLeft: d.seller_response_due_at
+          ? Math.ceil((new Date(d.seller_response_due_at).getTime() - now) / 86_400_000)
+          : null,
+        updatedAt: d.paypal_updated_at,
+        buyerName: (d.buyer as string | null) ?? null,
+        outcome: (d.outcome as string | null) ?? null,
+        decision: dec
+          ? {
+              status: dec.status,
+              recommendation: (dec.recommendation as "fight" | "refund" | "settle" | null) ?? null,
+              confidence: dec.confidence === null ? null : Number(dec.confidence),
+              current:
+                !d.paypal_updated_at ||
+                !dec.dispute_updated_at ||
+                new Date(dec.dispute_updated_at).getTime() >= new Date(d.paypal_updated_at).getTime(),
+            }
+          : null,
+      };
+    }),
+  };
+}
+
+/** Per-request memo so the app layout and the page can both ask without querying twice. */
+export const getHomeDataCached = cache(getHomeData);

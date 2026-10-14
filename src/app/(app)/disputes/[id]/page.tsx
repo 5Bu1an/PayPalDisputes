@@ -4,7 +4,7 @@ import { connection } from "next/server";
 import { computeUrgency } from "@/lib/agent";
 import { actionsMode } from "@/lib/respond";
 import { getDisputeDetail, type OrderEvidence, type PayPalDisputeDetail } from "@/lib/dashboard";
-import { Deadline, formatAmount, humanize, reasonLabel, StatusBadge } from "../../_components/dispute-ui";
+import { Deadline, formatAmount, humanize, reasonLabel, StatusBadge } from "@/app/_components/dispute-ui";
 import { AssessmentReport } from "./assessment";
 
 /** PayPal's action names (the `rel` of each POST link) in seller-facing words. */
@@ -166,8 +166,8 @@ export default async function DisputeDetailPage({ params }: PageProps<"/disputes
   const allowed = (raw.links ?? []).filter((l) => l.method === "POST").map((l) => l.rel);
 
   return (
-    <main className="mx-auto w-full max-w-6xl px-4 py-10 sm:px-6">
-      <Link href="/" className="text-sm text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200">
+    <div className="mx-auto w-full max-w-[1120px] px-5 pt-8 pb-20 md:px-10 md:pt-10">
+      <Link href="/disputes" className="text-sm text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200">
         ← All disputes
       </Link>
 
@@ -263,6 +263,6 @@ export default async function DisputeDetailPage({ params }: PageProps<"/disputes
           </Card>
         </div>
       </div>
-    </main>
+    </div>
   );
 }

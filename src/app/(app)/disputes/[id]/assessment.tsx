@@ -1,7 +1,7 @@
 import type { computeUrgency } from "@/lib/agent";
 import type { Decision } from "@/lib/dashboard";
 import type { ActionsMode } from "@/lib/respond";
-import { DRAFT_LABELS, formatAmount } from "../../_components/dispute-ui";
+import { DRAFT_LABELS, formatAmount } from "@/app/_components/dispute-ui";
 import { ReviewForm } from "./review";
 
 type Level = "high" | "medium" | "low";
