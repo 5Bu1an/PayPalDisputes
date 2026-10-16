@@ -98,6 +98,10 @@ export type OrderEvidence = {
   trackingEvents: { at: string; location?: string; description: string }[];
   notes: string | null;
   simulated: boolean;
+  /** What we last uploaded to PayPal's tracking for this transaction (SHIPPED/DELIVERED), if anything. */
+  payPalTrackingStatus: string | null;
+  payPalTrackingUploadedAt: string | null;
+  payPalTrackingError: string | null;
 };
 
 /** The agent's latest report on a dispute (`decisions` table). */
@@ -196,6 +200,9 @@ export async function getOrder(paypalTransactionId: string | undefined): Promise
     trackingEvents: o.tracking_events ?? [],
     notes: o.notes,
     simulated: o.simulated,
+    payPalTrackingStatus: o.paypal_tracking_status ?? null,
+    payPalTrackingUploadedAt: o.paypal_tracking_uploaded_at ?? null,
+    payPalTrackingError: o.paypal_tracking_error ?? null,
   };
 }
 

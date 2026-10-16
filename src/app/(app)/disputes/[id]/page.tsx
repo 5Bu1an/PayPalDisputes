@@ -109,6 +109,22 @@ const SHIPPING_STYLES: Record<string, string> = {
 const yesNo = (value: boolean | null, good: string, bad: string) =>
   value === null ? "—" : value ? <span className="text-emerald-700 dark:text-emerald-400">{good}</span> : <span className="text-red-600 dark:text-red-400">{bad}</span>;
 
+/** Whether this order's tracking is on the PayPal transaction (uploaded by src/lib/tracking.ts). */
+function PayPalTracking({ order }: { order: OrderEvidence }) {
+  if (order.payPalTrackingUploadedAt) {
+    return (
+      <span className="text-emerald-700 dark:text-emerald-400">
+        Uploaded ✓ <span className="text-xs text-zinc-400">{formatDateTime(order.payPalTrackingUploadedAt)}</span>
+      </span>
+    );
+  }
+  if (order.payPalTrackingError) return <span className="text-red-600 dark:text-red-400">Upload failed: {order.payPalTrackingError}</span>;
+  if (order.shippingStatus !== "DELIVERED" && order.shippingStatus !== "IN_TRANSIT") {
+    return <span className="text-zinc-500 dark:text-zinc-400">Not shipped, nothing to upload</span>;
+  }
+  return <span className="text-zinc-500 dark:text-zinc-400">Not uploaded yet</span>;
+}
+
 /** The seller's order record: carrier, tracking, delivery and the carrier's scan history. */
 function Shipping({ order }: { order: OrderEvidence | null }) {
   if (!order) return <p className="text-sm text-zinc-500">No order record for this transaction.</p>;
@@ -131,6 +147,9 @@ function Shipping({ order }: { order: OrderEvidence | null }) {
           <span className="block text-xs text-zinc-500 dark:text-zinc-400">{order.shipToAddress ?? "—"}</span>
         </Field>
         <Field label="Matches PayPal address">{yesNo(order.shipToMatchesPayPal, "Yes", "No")}</Field>
+        <Field label="Tracking on PayPal">
+          <PayPalTracking order={order} />
+        </Field>
       </dl>
 
       {order.trackingEvents.length > 0 && (
