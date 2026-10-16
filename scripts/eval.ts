@@ -48,6 +48,12 @@ function draftProblems(c: CaseRow, a: Assessment): string[] {
   const links = (c.input.dispute as { links?: { rel: string; method: string }[] }).links ?? [];
   const allowed = new Set(links.filter((l) => l.method === "POST").map((l) => l.rel));
   const problems = a.drafts.filter((d) => !allowed.has(d.action)).map((d) => `${d.action} isn't allowed on this dispute`);
+  for (const d of a.drafts) {
+    if (/\b(fraud\w*|scam\w*)\b/i.test(d.text)) problems.push(`${d.action} draft calls the buyer a fraud/scam`);
+    if (d.recipient === "buyer" && /other disputes?|previous disputes?|dispute history/i.test(d.text)) {
+      problems.push(`${d.action} draft (read by the buyer) mentions their dispute history`);
+    }
+  }
   if (!a.drafts.some((d) => REQUIRED_ACTIONS[a.recommendation].includes(d.action))) {
     problems.push(`no ${REQUIRED_ACTIONS[a.recommendation].join(" or ")} draft for "${a.recommendation}"`);
   }
