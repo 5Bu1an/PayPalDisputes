@@ -112,6 +112,20 @@ export function AssessmentReport({
         </Section>
       )}
 
+      {a.investigation && a.investigation.length > 0 && (
+        <Section title="What the agent checked">
+          <ul className="space-y-1.5">
+            {a.investigation.map((t, i) => (
+              <li key={i} className="flex gap-2">
+                <span className={t.ok ? "text-emerald-600 dark:text-emerald-400" : "text-zinc-400"}>{t.ok ? "✓" : "–"}</span>
+                <span className={t.ok ? "" : "text-zinc-500 dark:text-zinc-400"}>{t.summary}</span>
+                <span className="ml-auto shrink-0 font-mono text-[11px] text-zinc-400">{t.tool}</span>
+              </li>
+            ))}
+          </ul>
+        </Section>
+      )}
+
       <Section title="Evidence">
         <div className="grid gap-4 sm:grid-cols-2">
           <ul className="space-y-1.5">

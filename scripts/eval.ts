@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { analyzeDispute, PROMPT_VERSION, type Assessment, type DisputeInput } from "@/lib/agent";
+import { fixtureTools } from "@/lib/investigate";
 import { MODELS } from "@/lib/openai";
 import { supabaseAdmin } from "@/lib/supabase";
 
@@ -68,7 +69,7 @@ function arg(name: string) {
 async function runCase(c: CaseRow, model: string): Promise<Result> {
   const started = Date.now();
   try {
-    const { assessment, inputTokens, outputTokens } = await analyzeDispute(c.input, model);
+    const { assessment, inputTokens, outputTokens } = await analyzeDispute(c.input, { model, tools: fixtureTools(c.input) });
     const recommendationOk = [c.expected_recommendation, ...c.acceptable_recommendations].includes(assessment.recommendation);
     const urgencyOk = assessment.urgency === c.expected_urgency;
     const riskOk = assessment.risk === c.expected_risk;
@@ -123,6 +124,7 @@ function printReport(results: Result[], model: string) {
           `risk ${cell(r.riskOk, a.risk, r.c.expected_risk)}`,
           `conf ${a.confidence.toFixed(2)}`,
           `drafts ${a.drafts.map((d) => `${d.action}→${d.recipient}`).join(", ")}`,
+          `looked up ${(a.investigation ?? []).map((t) => t.tool).join(", ") || "nothing"}`,
         ].join("   "),
     );
     for (const p of r.draftProblems) console.log(`    ! draft: ${p}`);
@@ -142,6 +144,7 @@ Recommendation        ${pct(count((r) => r.recommendationOk), n)}
 Urgency               ${pct(count((r) => r.urgencyOk), n)}
 Risk                  ${pct(count((r) => r.riskOk), n)}
 Drafts ok             ${pct(count((r) => !!r.assessment && r.draftProblems.length === 0), n)}
+Checked store order   ${pct(count((r) => !!r.assessment?.investigation?.some((t) => t.tool === "get_store_order")), n)}
 Avg confidence        ${avgConf(answered.filter((r) => r.recommendationOk))} when right · ${avgConf(answered.filter((r) => !r.recommendationOk))} when wrong
 Errors                ${count((r) => r.error !== null)}
 Tokens                ${tokensIn} in · ${tokensOut} out`);
