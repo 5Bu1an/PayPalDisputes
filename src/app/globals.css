@@ -226,6 +226,22 @@ body {
   animation: mk-pulse-dot 2.4s ease-in-out infinite;
 }
 
+@keyframes mk-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+.animate-fade-in {
+  animation: mk-fade-in 200ms ease-out both;
+}
+
+@keyframes mk-slide-in-right {
+  from { transform: translate3d(24px, 0, 0); opacity: 0; }
+  to { transform: none; opacity: 1; }
+}
+.animate-slide-in-right {
+  animation: mk-slide-in-right 260ms var(--mk-ease) both;
+}
+
 .rolling-strip {
   transition: transform 3200ms cubic-bezier(0.16, 1, 0.3, 1);
 }
@@ -250,7 +266,9 @@ body {
   .animate-slide-y,
   .animate-spin-slow,
   .animate-pulse-dot,
-  .animate-progress {
+  .animate-progress,
+  .animate-fade-in,
+  .animate-slide-in-right {
     animation: none;
   }
   .rolling-strip {

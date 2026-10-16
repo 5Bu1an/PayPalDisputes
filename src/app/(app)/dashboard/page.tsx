@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { connection } from "next/server";
 import { ArrowRight, ChevronDown, Clock3, ExternalLink, FileCheck2, Inbox, ListTree, MessageSquareWarning } from "lucide-react";
+import { DeadlineChart, ReasonChart, RecommendationChart, type Bucket } from "@/components/app/Charts";
 import { RollingNumber } from "@/components/motion/RollingNumber";
 import { Badge, DecisionBadge } from "@/components/ui/primitives";
 import { formatAmount, reasonLabel, StatusBadge } from "@/app/_components/dispute-ui";
@@ -43,6 +44,22 @@ export default async function DashboardHome({ searchParams }: PageProps<"/dashbo
   const byCurrency = [...totals.entries()].sort((a, b) => b[1] - a[1]);
   const [headCurrency, headTotal] = byCurrency[0] ?? ["USD", 0];
   const [symbol, digits] = splitCurrency(headTotal, headCurrency);
+
+  // Chart data, all from the same rows the rest of the page uses.
+  const buckets: Bucket[] = [
+    { label: "Overdue", test: (n: number) => n < 0, urgent: true },
+    { label: "0–3 days", test: (n: number) => n >= 0 && n <= 3, urgent: true },
+    { label: "4–7 days", test: (n: number) => n >= 4 && n <= 7, urgent: false },
+    { label: "8–14 days", test: (n: number) => n >= 8 && n <= 14, urgent: false },
+    { label: "15+ days", test: (n: number) => n >= 15, urgent: false },
+  ].map(({ label, test, urgent }) => ({ label, urgent, value: respond.filter((d) => d.daysLeft !== null && test(d.daysLeft)).length }));
+  const reasonCounts = new Map<string, number>();
+  for (const d of open) reasonCounts.set(reasonLabel(d.reason), (reasonCounts.get(reasonLabel(d.reason)) ?? 0) + 1);
+  const reasons = [...reasonCounts.entries()].map(([label, value]) => ({ label, value })).sort((a, b) => b.value - a.value);
+  const mix = (["fight", "settle", "refund"] as const).map((rec) => ({
+    label: ({ fight: "Fight", settle: "Settle", refund: "Refund" } as const)[rec],
+    value: open.filter((d) => d.report?.recommendation === rec && d.report.current).length,
+  }));
 
   const nextDeadline = respond
     .filter((d) => d.daysLeft !== null)
@@ -141,6 +158,19 @@ export default async function DashboardHome({ searchParams }: PageProps<"/dashbo
           <StatCard label="Needs your response" value={respond.length} href="/disputes?view=needs-response" />
           <StatCard label="Won" value={won} hint="Resolved in your favour" />
           <StatCard label="Lost" value={lost} hint="Resolved for the buyer" />
+        </div>
+      </section>
+
+      {/* Insights */}
+      <section aria-labelledby="insights" className="mt-12">
+        <h2 id="insights" className="text-[15px] font-semibold text-fg">
+          Insights
+        </h2>
+        <p className="mt-0.5 text-[12.5px] text-fg-muted">Open disputes right now{store ? ` · ${store.name}` : ""}</p>
+        <div className="mt-4 grid gap-3 lg:grid-cols-3">
+          <DeadlineChart buckets={buckets} />
+          <ReasonChart reasons={reasons} />
+          <RecommendationChart mix={mix} />
         </div>
       </section>
 
