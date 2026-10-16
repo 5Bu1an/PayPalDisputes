@@ -30,7 +30,7 @@ export default async function EvalsPage() {
       ) : (
         <>
           <section aria-label="Latest run" className="mt-8 grid grid-cols-2 gap-3 md:grid-cols-4">
-            <Stat label="Latest prompt" value={newest.version} hint={newest.model} />
+            <Stat label="Latest run" value={newest.version} hint={newest.model} />
             <Stat
               label="Pass rate"
               value={`${newest.passPct.toFixed(1)}%`}

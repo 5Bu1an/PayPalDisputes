@@ -17,9 +17,19 @@ export type EvalRow = {
   error: string | null;
 };
 
-export type EvalVersion = { version: string; model: string; runId: string; runAt: string; cases: number; passPct: number; avgSeconds: number };
+export type EvalVersion = {
+  /** Prompt version, plus the model when that version was run with more than one (e.g. "v6 luna"). */
+  version: string;
+  promptVersion: string;
+  model: string;
+  runId: string;
+  runAt: string;
+  cases: number;
+  passPct: number;
+  avgSeconds: number;
+};
 
-/** Every prompt version's most recent run (oldest version first), plus the newest run's case-by-case results. */
+/** The most recent run of every prompt version × model (oldest first), plus the newest run's case-by-case results. */
 export async function getEvalData(): Promise<{ versions: EvalVersion[]; latest: EvalRow[] }> {
   const db = supabaseAdmin();
   const [results, cases] = await Promise.all([
@@ -32,18 +42,25 @@ export async function getEvalData(): Promise<{ versions: EvalVersion[]; latest: 
   if (results.error) throw results.error;
   if (cases.error) throw cases.error;
 
-  // Group rows into runs, then keep the newest run per prompt version.
+  // Group rows into runs, then keep the newest run per prompt version × model.
   const runs = new Map<string, typeof results.data>();
   for (const r of results.data) runs.set(r.run_id, [...(runs.get(r.run_id) ?? []), r]);
-  const newestRunPerVersion = new Map<string, string>();
-  for (const [runId, rows] of runs) newestRunPerVersion.set(rows[0].prompt_version, runId); // runs arrive oldest first
+  const newestRun = new Map<string, string>();
+  for (const [runId, rows] of runs) newestRun.set(`${rows[0].prompt_version}|${rows[0].model}`, runId); // runs arrive oldest first
+  const modelsPerVersion = new Map<string, Set<string>>();
+  for (const key of newestRun.keys()) {
+    const [version, model] = key.split("|");
+    modelsPerVersion.set(version, (modelsPerVersion.get(version) ?? new Set()).add(model));
+  }
 
-  const versions: EvalVersion[] = [...newestRunPerVersion.entries()].map(([version, runId]) => {
+  const versions: EvalVersion[] = [...newestRun.values()].map((runId) => {
     const rows = runs.get(runId)!;
     const timed = rows.filter((r) => r.latency_ms != null);
+    const { prompt_version: version, model } = rows[0];
     return {
-      version,
-      model: rows[0].model,
+      version: modelsPerVersion.get(version)!.size > 1 ? `${version} ${model.split("-").pop()}` : version,
+      promptVersion: version,
+      model,
       runId,
       runAt: rows[0].created_at,
       cases: rows.length,
