@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { connection } from "next/server";
-import { Bell, FileText, House, Inbox, Settings, Store } from "lucide-react";
+import { Bell, FileText, FlaskConical, House, Inbox, Settings, Store } from "lucide-react";
 import { NavLink } from "@/components/app/NavLink";
 import { Button } from "@/components/ui/Button";
 import { Logo } from "@/components/ui/Logo";
@@ -19,6 +19,8 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
     (d) => d.status !== "RESOLVED" && d.report?.status === "pending_review" && d.report.current,
   ).length;
   const mode = actionsMode();
+  // Team-only tools (Evals) stay out of the seller's sidebar unless SHOW_INTERNAL_TOOLS=true.
+  const showInternal = process.env.SHOW_INTERNAL_TOOLS === "true";
 
   return (
     <div className="flex min-h-full flex-1 bg-canvas text-fg [color-scheme:light]">
@@ -42,6 +44,17 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
             Disputes
           </NavLink>
         </nav>
+
+        {showInternal && (
+          <>
+            <p className="mt-7 px-3 text-[11px] font-medium tracking-[0.04em] text-fg-muted uppercase">Internal</p>
+            <nav aria-label="Internal" className="mt-2 flex flex-col gap-1">
+              <NavLink href="/evals" icon={<FlaskConical strokeWidth={1.6} />}>
+                Evals
+              </NavLink>
+            </nav>
+          </>
+        )}
 
         <p className="mt-7 px-3 text-[11px] font-medium tracking-[0.04em] text-fg-muted uppercase">Coming soon</p>
         <ul className="mt-2 flex flex-col gap-1" aria-label="Coming soon">
@@ -105,6 +118,11 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
             <NavLink href="/disputes" variant="tab" badge={needsResponse}>
               Disputes
             </NavLink>
+            {showInternal && (
+              <NavLink href="/evals" variant="tab">
+                Evals
+              </NavLink>
+            )}
           </nav>
         </header>
 
