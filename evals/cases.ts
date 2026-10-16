@@ -90,6 +90,9 @@ function order(o: Partial<OrderEvidence>): OrderEvidence {
     trackingEvents: [],
     notes: null,
     simulated: true,
+    payPalTrackingStatus: null,
+    payPalTrackingUploadedAt: null,
+    payPalTrackingError: null,
     ...o,
   };
 }
