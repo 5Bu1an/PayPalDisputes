@@ -2,7 +2,8 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { connection } from "next/server";
 import { DisputesGrid } from "@/components/app/DisputesGrid";
-import { getHomeDataCached, type HomeDispute } from "@/lib/dashboard";
+import { getDisputeDetail, getHomeDataCached, type HomeDispute } from "@/lib/dashboard";
+import { DisputePanel } from "./panel";
 import { cn } from "@/lib/cn";
 
 export const metadata: Metadata = { title: "Disputes · Kaleshi" };
@@ -14,6 +15,12 @@ const VIEWS = {
     match: (d: HomeDispute) => d.status !== "RESOLVED" && d.report?.status === "pending_review" && d.report.current,
   },
   "needs-response": { label: "Needs response", match: (d: HomeDispute) => d.status === "WAITING_FOR_SELLER_RESPONSE" },
+  "due-this-week": {
+    label: "Due this week",
+    match: (d: HomeDispute) => d.status === "WAITING_FOR_SELLER_RESPONSE" && d.daysLeft !== null && d.daysLeft <= 7,
+  },
+  "high-value": { label: "High value (200+)", match: (d: HomeDispute) => d.status !== "RESOLVED" && (d.amount ?? 0) > 200 },
+  chargebacks: { label: "Chargebacks", match: (d: HomeDispute) => d.stage === "CHARGEBACK" || d.stage === "ARBITRATION" },
   resolved: { label: "Resolved", match: (d: HomeDispute) => d.status === "RESOLVED" },
 } as const;
 type View = keyof typeof VIEWS;
@@ -24,9 +31,13 @@ const byDeadline = (a: HomeDispute, b: HomeDispute) =>
 
 export default async function DisputesPage({ searchParams }: PageProps<"/disputes">) {
   await connection(); // always read fresh rows from Supabase, never a build-time snapshot
-  const { view: rawView } = await searchParams;
+  const { view: rawView, open } = await searchParams;
   const view: View = typeof rawView === "string" && rawView in VIEWS ? (rawView as View) : "all";
-  const { disputes } = await getHomeDataCached();
+  const listHref = view === "all" ? "/disputes" : `/disputes?view=${view}`;
+  const [{ disputes }, opened] = await Promise.all([
+    getHomeDataCached(),
+    typeof open === "string" ? getDisputeDetail(open) : Promise.resolve(null),
+  ]);
   const rows = disputes.filter(VIEWS[view].match).sort(byDeadline);
 
   return (
@@ -74,9 +85,11 @@ export default async function DisputesPage({ searchParams }: PageProps<"/dispute
         </p>
       ) : (
         <div className="mt-6">
-          <DisputesGrid rows={rows} csvName={`kaleshi-disputes-${view}`} />
+          <DisputesGrid rows={rows} listHref={listHref} csvName={`kaleshi-disputes-${view}`} />
         </div>
       )}
+
+      {opened && <DisputePanel dispute={opened} disputes={disputes} listHref={listHref} />}
     </div>
   );
 }

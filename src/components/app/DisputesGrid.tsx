@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useRef, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { AgGridReact } from "ag-grid-react";
 import type { ColDef, ICellRendererParams } from "ag-grid-community";
@@ -95,18 +96,64 @@ function DeadlineCell({ data: d }: Cell) {
   );
 }
 
+/** Phone layout: one tappable card per dispute instead of a wide grid. */
+function DisputeCard({ d, urgent, href }: { d: HomeDispute; urgent: boolean; href: string }) {
+  return (
+    <Link
+      href={href}
+      scroll={false}
+      className={cn(
+        "block rounded-2xl border bg-canvas p-4 transition-colors active:bg-subtle",
+        urgent ? "border-bad/40 bg-bad-bg/40" : "border-line",
+      )}
+    >
+      <span className="flex items-start justify-between gap-3">
+        <span className="min-w-0">
+          <span className="block truncate text-[15px] font-medium text-fg">{d.buyerName ?? "Unknown buyer"}</span>
+          <span className="block text-[13px] text-fg-body">{reasonLabel(d.reason)}</span>
+        </span>
+        <span className="shrink-0 text-[15px] font-medium text-fg tabular-nums">{formatAmount(d.amount, d.currency)}</span>
+      </span>
+      <span className="mt-3 flex flex-wrap items-center justify-between gap-2">
+        <AiCell {...({ data: d } as Cell)} />
+        <span className="text-[12.5px]">
+          <Deadline dueAt={d.dueAt} daysLeft={d.daysLeft} status={d.status} />
+        </span>
+      </span>
+    </Link>
+  );
+}
+
 /** Soonest deadline first; disputes without one go last. */
 const deadlineComparator = (a: number | null, b: number | null) => (a ?? Infinity) - (b ?? Infinity);
 
 /**
- * Sortable, filterable disputes table (AG Grid Community). Click or press Enter on a row to open it.
+ * Sortable, filterable disputes table (AG Grid Community). Click or press Enter on a row to open it
+ * in the side panel.
  * Search matches buyer, dispute id, seller, reason, status and recommendation.
  */
-export function DisputesGrid({ rows, csvName = "disputes" }: { rows: HomeDispute[]; csvName?: string }) {
+export function DisputesGrid({
+  rows,
+  listHref,
+  csvName = "disputes",
+}: {
+  rows: HomeDispute[];
+  /** The current list URL; opening a dispute adds `open=<id>` to it so the side panel shows over the list. */
+  listHref: string;
+  csvName?: string;
+}) {
   const router = useRouter();
+  const openHref = (id: string) => `${listHref}${listHref.includes("?") ? "&" : "?"}open=${encodeURIComponent(id)}`;
+  const openDispute = (id: string) => router.push(openHref(id), { scroll: false });
   const gridRef = useRef<AgGridReact<HomeDispute>>(null);
   const [query, setQuery] = useState("");
   const [shown, setShown] = useState(rows.length);
+
+  // Overdue or due within 2 days stay pinned on top while scrolling. While searching they rejoin
+  // the list so the search covers everything.
+  const isUrgent = (d: HomeDispute) => d.status === "WAITING_FOR_SELLER_RESPONSE" && d.daysLeft !== null && d.daysLeft <= 2;
+  const pinned = query ? [] : rows.filter(isUrgent);
+  const body = query ? rows : rows.filter((d) => !isUrgent(d));
 
   const columnDefs = useMemo<ColDef<HomeDispute>[]>(
     () => [
@@ -192,7 +239,8 @@ export function DisputesGrid({ rows, csvName = "disputes" }: { rows: HomeDispute
           />
         </label>
         <span className="text-[12.5px] text-fg-muted tabular-nums" aria-live="polite">
-          {shown} of {rows.length}
+          {shown + pinned.length} of {rows.length}
+          {pinned.length > 0 && <span className="ml-2 text-bad">· {pinned.length} due within 2 days, pinned on top</span>}
         </span>
         <button
           type="button"
@@ -204,11 +252,23 @@ export function DisputesGrid({ rows, csvName = "disputes" }: { rows: HomeDispute
         </button>
       </div>
 
-      <div className="h-auto">
+      <ul className="space-y-2 md:hidden">
+        {[...pinned, ...body]
+          .filter((d) => !query || [d.buyerName, d.id, d.sellerName, reasonLabel(d.reason)].join(" ").toLowerCase().includes(query.toLowerCase()))
+          .map((d) => (
+            <li key={d.id}>
+              <DisputeCard d={d} urgent={isUrgent(d)} href={openHref(d.id)} />
+            </li>
+          ))}
+      </ul>
+
+      <div className="hidden md:block">
         <AgGridReact<HomeDispute>
           ref={gridRef}
           theme={gridTheme}
-          rowData={rows}
+          rowData={body}
+          pinnedTopRowData={pinned}
+          getRowClass={(p) => (p.node.rowPinned ? "bg-bad-bg/60" : undefined)}
           columnDefs={columnDefs}
           defaultColDef={defaultColDef}
           getRowId={(p) => p.data.id}
@@ -218,10 +278,10 @@ export function DisputesGrid({ rows, csvName = "disputes" }: { rows: HomeDispute
           paginationPageSize={25}
           paginationPageSizeSelector={false}
           rowClass="cursor-pointer"
-          onRowClicked={(e) => e.data && router.push(`/disputes/${e.data.id}`)}
+          onRowClicked={(e) => e.data && openDispute(e.data.id)}
           onCellKeyDown={(e) => {
             const key = (e.event as KeyboardEvent | undefined)?.key;
-            if (key === "Enter" && e.data) router.push(`/disputes/${e.data.id}`);
+            if (key === "Enter" && e.data) openDispute(e.data.id);
           }}
           onModelUpdated={(e) => setShown(e.api.getDisplayedRowCount())}
           overlayNoRowsTemplate='<span style="color:#8f8681">No disputes match.</span>'
