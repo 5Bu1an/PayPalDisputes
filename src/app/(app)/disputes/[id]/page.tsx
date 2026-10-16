@@ -6,6 +6,7 @@ import { actionsMode } from "@/lib/respond";
 import { getDisputeDetail, type OrderEvidence, type PayPalDisputeDetail } from "@/lib/dashboard";
 import { Deadline, formatAmount, humanize, reasonLabel, StatusBadge } from "@/app/_components/dispute-ui";
 import { AssessmentReport } from "./assessment";
+import { BuyerHistoryCard } from "./buyer-history";
 
 /** PayPal's action names (the `rel` of each POST link) in seller-facing words. */
 const ACTIONS: Record<string, string> = {
@@ -235,6 +236,10 @@ export default async function DisputeDetailPage({ params }: PageProps<"/disputes
                 )}
               </Field>
             </dl>
+          </Card>
+
+          <Card title="Buyer history">
+            <BuyerHistoryCard history={dispute.buyerHistory} />
           </Card>
 
           <Card title="Shipping">

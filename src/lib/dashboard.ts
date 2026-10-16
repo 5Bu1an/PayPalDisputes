@@ -1,4 +1,5 @@
 import type { Assessment } from "@/lib/agent";
+import { getBuyerHistory, type BuyerHistory } from "@/lib/buyer-history";
 import { cache } from "react";
 import { supabaseAdmin } from "@/lib/supabase";
 
@@ -119,6 +120,7 @@ export type DisputeDetail = DisputeRow & {
   raw: PayPalDisputeDetail;
   order: OrderEvidence | null;
   decision: Decision | null;
+  buyerHistory: BuyerHistory | null;
 };
 
 /** The newest decision for a dispute, or null if the agent hasn't assessed it. */
@@ -210,9 +212,10 @@ export async function getDisputeDetail(id: string): Promise<DisputeDetail | null
 
   const seller = d.sellers as { name: string } | { name: string }[] | null;
   const raw = d.raw as PayPalDisputeDetail;
-  const [order, decision] = await Promise.all([
+  const [order, decision, buyerHistory] = await Promise.all([
     getOrder(raw.disputed_transactions?.[0]?.seller_transaction_id),
     getLatestDecision(d.id, d.paypal_updated_at),
+    getBuyerHistory(d.id),
   ]);
   return {
     id: d.id,
@@ -231,6 +234,7 @@ export async function getDisputeDetail(id: string): Promise<DisputeDetail | null
     raw,
     order,
     decision,
+    buyerHistory,
   };
 }
 
